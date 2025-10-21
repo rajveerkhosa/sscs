@@ -1,0 +1,44 @@
+mode: "scrape"   # scrape only (no downloads)
+
+sscs:
+  login_url: "https://sscsta.sscsinc.com/Auth.App/#/login?returnUrl=~2FCStore.Web~2FAccount~2FLogin"
+  base_url:  "https://sscsta.sscsinc.com/TransactionAnalysis.App"
+  selected_site_code: "006579001"
+  credentials:
+    user_env: "SSCS_USER"
+    pass_env: "SSCS_PASS"
+
+week:
+  ending_weekday: "Sun"                 # last full Sunday
+  label_format: "ordinal_day short_month"  # e.g., '22nd Sep'
+  # Build startDate/endDate for SSCS as YYYYMMDDhhmmss (Mon 000000 to Sun 235959)
+
+fuel:
+  department: "1"
+  diesel_prefixes:  ["050","019"]
+  regular_prefixes: ["001","002","003"]
+  def_prefixes:     ["062"]
+
+excel:
+  workbook: "Weekly Tracker.xlsx"
+  backup_dir: "backups"
+  log_dir: "logs"
+
+  sheets:
+    - name: "Weekly Gallons 25"
+      week_col: "A"
+      total_row_label: "Total"
+      rolling_window: true
+      thisweek_columns:
+        diesel_gal:  "B"
+        regular_gal: "E"
+        def_gal:     "H"
+        total_gal:   "K"
+
+    - name: "C Store Sales 25"
+      enabled: false            # set true if/when Store Stats is wired
+      week_col: "A"
+      total_row_label: "Total"
+      rolling_window: true
+      thisweek_columns:
+        cstore_sales: "B"

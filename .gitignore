@@ -1,0 +1,50 @@
+# Credentials and sensitive data
+.env
+
+# Excel tracker file (contains business data)
+Weekly Tracker.xlsx
+
+# Backup files
+backups/
+
+# Log files
+logs/
+
+# Export files
+exports/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS files
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Excel temp files
+~$*.xlsx
+~$*.xls
+
+# Selenium/Browser files
+geckodriver.log
+
+# Test files
+test_output/
+*.test.xlsx
