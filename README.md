@@ -303,6 +303,4 @@ For issues:
 3. Verify credentials in `.env`
 4. Check scheduler status: `launchctl list | grep sscs`
 
----
 
-**Made with Claude Code** 🤖
