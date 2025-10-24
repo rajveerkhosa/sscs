@@ -1,8 +1,14 @@
 # Credentials and sensitive data
 .env
 
-# Excel tracker file (contains business data)
+# Claude Code configuration
+.claude/
+.claude.json
+.claude.json.backup
+
+# Excel tracker files (contain business data)
 Weekly Tracker.xlsx
+Weekly Department Sales.xlsx
 
 # Backup files
 backups/
@@ -48,3 +54,6 @@ geckodriver.log
 # Test files
 test_output/
 *.test.xlsx
+
+# Weekly report marker (tracks last run)
+.last_report_run

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Job label - must be unique -->
+    <key>Label</key>
+    <string>com.sscs.weeklyreport</string>
+
+    <!-- Program to run (wrapper script handles weekly check) -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/raj/SSCS/weekly_report_wrapper.sh</string>
+    </array>
+
+    <!-- Working directory -->
+    <key>WorkingDirectory</key>
+    <string>/Users/raj/SSCS</string>
+
+    <!-- Standard output log -->
+    <key>StandardOutPath</key>
+    <string>/Users/raj/SSCS/logs/launchd_stdout.log</string>
+
+    <!-- Standard error log -->
+    <key>StandardErrorPath</key>
+    <string>/Users/raj/SSCS/logs/launchd_stderr.log</string>
+
+    <!-- Run at every login/startup - wrapper decides if report is needed -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Keep job alive if it crashes (optional) -->
+    <key>KeepAlive</key>
+    <false/>
+
+    <!-- Environment variables (optional - launchd has limited environment) -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/anaconda3/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+</dict>
+</plist>

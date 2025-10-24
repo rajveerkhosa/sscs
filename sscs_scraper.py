@@ -167,8 +167,17 @@ class SSCSScraper:
                 EC.presence_of_element_located((By.CSS_SELECTOR, "table tbody tr"))
             )
 
-            # Extra wait for Angular to finish rendering
-            time.sleep(5)
+            # Check if "Nothing found" appears (no data for this query)
+            try:
+                nothing_found = self.driver.find_element(By.CSS_SELECTOR, "table tbody tr td.dataTables_empty")
+                if nothing_found and "nothing found" in nothing_found.text.lower():
+                    self.logger.info("Table shows 'Nothing found' - no transactions for this prefix/date")
+                    return 0.0
+            except:
+                pass  # Element not found, continue normally
+
+            # Extra wait for Angular to finish rendering and footer to populate (longer for slow WiFi)
+            time.sleep(12)
             self.logger.info("Table loaded, reading headers...")
 
             # Find Qty column index
@@ -331,163 +340,166 @@ class SSCSScraper:
         self._save_debug_screenshot("qty_column_not_matched")
         raise ValueError(f"Qty column not found in table headers. Columns found: {', '.join(header_texts)}")
 
-    def _extract_footer_qty(self, qty_col_index):
+    def _extract_footer_qty(self, qty_col_index, max_retries=3):
         """
         Extract the Qty value from the table footer.
         Uses multiple strategies including pattern-based detection.
+        Includes retry logic and JavaScript-only approach to avoid stale elements.
 
         Args:
             qty_col_index (int): Index of Qty column from header
+            max_retries (int): Maximum number of retries
 
         Returns:
             float: Parsed quantity value
         """
-        try:
-            self.logger.info(f"Looking for footer Qty value (header column index: {qty_col_index})")
+        from selenium.common.exceptions import StaleElementReferenceException
 
-            # Find footer row
+        for attempt in range(max_retries):
             try:
-                footer_row = self.driver.find_element(By.CSS_SELECTOR, "table tfoot tr")
-                self.logger.info("✓ Using tfoot for footer")
-            except NoSuchElementException:
-                self.logger.info("No tfoot found, searching for summary row...")
-                footer_candidates = self.driver.find_elements(By.CSS_SELECTOR, "table tbody tr")
-
-                footer_row = None
-                for row in reversed(footer_candidates):
-                    cells = row.find_elements(By.TAG_NAME, "td")
-                    footer_cells = [c for c in cells if 'footer' in c.get_attribute('class')]
-                    if len(footer_cells) > 0:
-                        footer_row = row
-                        self.logger.info(f"✓ Using summary row with {len(footer_cells)} footer cells")
-                        break
-
-                if footer_row is None:
-                    self.logger.error("Footer row not found")
-                    raise ValueError("Footer row not found")
-
-            # Get all footer cells
-            cells = footer_row.find_elements(By.TAG_NAME, "td")
-            self.logger.info(f"Footer row has {len(cells)} <td> elements")
-
-            # Extract text from all cells using JavaScript (for debugging)
-            all_cell_texts = []
-            actual_cell_values = []
-            for idx, cell in enumerate(cells):
-                try:
-                    cell_text = self.driver.execute_script("return arguments[0].innerText || arguments[0].textContent;", cell)
-                    cell_text = str(cell_text).strip() if cell_text else ''
-                except:
-                    cell_text = cell.text.strip()
-
-                actual_cell_values.append(cell_text)
-                all_cell_texts.append(f"[{idx}]: '{cell_text}'")
-
-            self.logger.info(f"Footer cells: {', '.join(all_cell_texts)}")
-
-            # Check if all footer cells are empty (may need to wait longer for Angular)
-            if all(val == '' for val in actual_cell_values):
-                self.logger.info("Footer appears empty - retrying with longer wait...")
-
-                # Retry up to 3 times with increasing waits
-                for retry in range(1, 4):
-                    self.logger.info(f"Retry {retry}/3: Waiting 3 seconds for footer to load...")
+                if attempt > 0:
+                    self.logger.info(f"Retry {attempt}/{max_retries-1} for footer extraction...")
                     time.sleep(3)
 
-                    # Re-find footer row and cells (avoid stale elements)
-                    try:
-                        footer_row_fresh = self.driver.find_element(By.CSS_SELECTOR, "table tfoot tr")
-                    except NoSuchElementException:
-                        # Try summary row again
-                        footer_candidates = self.driver.find_elements(By.CSS_SELECTOR, "table tbody tr")
-                        footer_row_fresh = None
-                        for row in reversed(footer_candidates):
-                            row_cells = row.find_elements(By.TAG_NAME, "td")
-                            footer_cells = [c for c in row_cells if 'footer' in c.get_attribute('class')]
-                            if len(footer_cells) > 0:
-                                footer_row_fresh = row
-                                break
-                        if footer_row_fresh is None:
-                            self.logger.warning(f"Retry {retry}: Footer row not found")
-                            continue
+                self.logger.info(f"Looking for footer Qty value (header column index: {qty_col_index})")
 
-                    # Get fresh cell elements and update the original cells variable
-                    cells = footer_row_fresh.find_elements(By.TAG_NAME, "td")
-
-                    # Re-read all footer cells from fresh elements
-                    actual_cell_values = []
-                    all_cell_texts = []
-                    for idx, cell in enumerate(cells):
-                        try:
-                            cell_text = self.driver.execute_script("return arguments[0].innerText || arguments[0].textContent;", cell)
-                            cell_text = str(cell_text).strip() if cell_text else ''
-                        except:
-                            try:
-                                cell_text = cell.text.strip()
-                            except:
-                                cell_text = ''
-
-                        actual_cell_values.append(cell_text)
-                        all_cell_texts.append(f"[{idx}]: '{cell_text}'")
-
-                    self.logger.info(f"Retry {retry} footer cells: {', '.join(all_cell_texts)}")
-
-                    # Check if we now have data
-                    if not all(val == '' for val in actual_cell_values):
-                        self.logger.info(f"✓ Footer loaded on retry {retry}")
-                        break
-                else:
-                    # All retries failed - truly no data
-                    self.logger.info("Footer still empty after 3 retries - returning 0.00 gallons")
-                    return 0.0
-
-            # Strategy 1: Try using column index from header
-            qty_value = None
-            if qty_col_index < len(cells):
-                qty_cell = cells[qty_col_index]
+                # Find footer row
                 try:
-                    qty_text = self.driver.execute_script("return arguments[0].innerText || arguments[0].textContent;", qty_cell)
-                    qty_text = str(qty_text).strip() if qty_text else ''
-                except:
-                    qty_text = qty_cell.text.strip()
+                    footer_row = self.driver.find_element(By.CSS_SELECTOR, "table tfoot tr")
+                    self.logger.info("✓ Using tfoot for footer")
+                except NoSuchElementException:
+                    self.logger.info("No tfoot found, searching for summary row...")
+                    footer_candidates = self.driver.find_elements(By.CSS_SELECTOR, "table tbody tr")
 
-                self.logger.info(f"Strategy 1 (index match): Cell[{qty_col_index}] = '{qty_text}'")
+                    footer_row = None
+                    for row in reversed(footer_candidates):
+                        cells = row.find_elements(By.TAG_NAME, "td")
+                        footer_cells = [c for c in cells if 'footer' in c.get_attribute('class')]
+                        if len(footer_cells) > 0:
+                            footer_row = row
+                            self.logger.info(f"✓ Using summary row with {len(footer_cells)} footer cells")
+                            break
 
-                if qty_text and self._is_qty_value(qty_text):
-                    qty_value = self._parse_qty_value(qty_text)
-                    self.logger.info(f"✓ Strategy 1 succeeded: {qty_value:,.2f}")
-                else:
-                    self.logger.warning(f"Strategy 1 failed: Cell empty or doesn't look like Qty")
+                    if footer_row is None:
+                        if attempt < max_retries - 1:
+                            self.logger.warning("Footer row not found, retrying...")
+                            continue
+                        else:
+                            self.logger.error("Footer row not found after retries")
+                            raise ValueError("Footer row not found")
 
-            # Strategy 2: Search all footer cells for Qty pattern
-            if qty_value is None:
-                self.logger.info("Strategy 2: Searching all footer cells for Qty pattern...")
+                # Use JavaScript to get cell count (avoid storing element references)
+                cell_count = self.driver.execute_script(
+                    "return arguments[0].querySelectorAll('td').length;",
+                    footer_row
+                )
+                self.logger.info(f"Footer row has {cell_count} <td> elements")
 
-                for idx, cell in enumerate(cells):
+                # Read all cell values using JavaScript directly (no stale elements)
+                all_cell_texts = []
+                actual_cell_values = []
+
+                for idx in range(cell_count):
                     try:
-                        cell_text = self.driver.execute_script("return arguments[0].innerText || arguments[0].textContent;", cell)
+                        cell_text = self.driver.execute_script(
+                            "return arguments[0].querySelectorAll('td')[arguments[1]].textContent;",
+                            footer_row, idx
+                        )
                         cell_text = str(cell_text).strip() if cell_text else ''
-                    except:
-                        cell_text = cell.text.strip()
+                    except Exception as e:
+                        self.logger.debug(f"Error reading cell {idx}: {e}")
+                        cell_text = ''
 
-                    if cell_text and self._is_qty_value(cell_text):
-                        qty_value = self._parse_qty_value(cell_text)
-                        self.logger.info(f"✓ Strategy 2 succeeded: Found Qty at cell[{idx}] = {qty_value:,.2f}")
-                        break
+                    actual_cell_values.append(cell_text)
+                    all_cell_texts.append(f"[{idx}]: '{cell_text}'")
 
-            if qty_value is None:
-                self.logger.error("Both strategies failed - could not find Qty value in footer")
-                self.logger.error(f"Footer cells were: {', '.join(all_cell_texts)}")
-                self._save_debug_screenshot("footer_qty_not_found")
-                raise ValueError("Could not extract Qty value from footer")
+                self.logger.info(f"Footer cells: {', '.join(all_cell_texts)}")
 
-            self.logger.info(f"Final Qty value: {qty_value:,.2f}")
-            return qty_value
+                # Check if all footer cells are empty (may need to wait longer for Angular)
+                if all(val == '' for val in actual_cell_values):
+                    if attempt < max_retries - 1:
+                        self.logger.info("Footer appears empty - retrying with longer wait...")
+                        time.sleep(5)
+                        continue
+                    else:
+                        self.logger.info("Footer still empty after retries - likely no data for this prefix/date range")
+                        return 0.0
 
-        except Exception as e:
-            self.logger.error(f"Error extracting footer Qty: {e}")
-            self._save_debug_screenshot("footer_extraction_error")
-            raise
+                # Strategy 1: Try using column index from header
+                qty_value = None
+                if qty_col_index < cell_count:
+                    try:
+                        qty_text = self.driver.execute_script(
+                            "return arguments[0].querySelectorAll('td')[arguments[1]].textContent;",
+                            footer_row, qty_col_index
+                        )
+                        qty_text = str(qty_text).strip() if qty_text else ''
+                    except Exception as e:
+                        self.logger.debug(f"Error reading qty cell: {e}")
+                        qty_text = ''
+
+                    self.logger.info(f"Strategy 1 (index match): Cell[{qty_col_index}] = '{qty_text}'")
+
+                    if qty_text and self._is_qty_value(qty_text):
+                        qty_value = self._parse_qty_value(qty_text)
+                        self.logger.info(f"✓ Strategy 1 succeeded: {qty_value:,.2f}")
+                    else:
+                        self.logger.warning(f"Strategy 1 failed: Cell empty or doesn't look like Qty")
+
+                # Strategy 2: Search all footer cells for Qty pattern
+                if qty_value is None:
+                    self.logger.info("Strategy 2: Searching all footer cells for Qty pattern...")
+
+                    for idx in range(cell_count):
+                        try:
+                            cell_text = self.driver.execute_script(
+                                "return arguments[0].querySelectorAll('td')[arguments[1]].textContent;",
+                                footer_row, idx
+                            )
+                            cell_text = str(cell_text).strip() if cell_text else ''
+                        except Exception as e:
+                            self.logger.debug(f"Error reading cell {idx}: {e}")
+                            cell_text = ''
+
+                        if cell_text and self._is_qty_value(cell_text):
+                            qty_value = self._parse_qty_value(cell_text)
+                            self.logger.info(f"✓ Strategy 2 succeeded: Found Qty at cell[{idx}] = {cell_text}")
+                            break
+
+                if qty_value is None:
+                    if attempt < max_retries - 1:
+                        self.logger.warning("Could not find Qty value, retrying...")
+                        continue
+                    else:
+                        self.logger.error("Both strategies failed - could not find Qty value in footer")
+                        self.logger.error(f"Footer cells were: {', '.join(all_cell_texts)}")
+                        self._save_debug_screenshot("footer_qty_not_found")
+                        raise ValueError("Could not extract Qty value from footer")
+
+                self.logger.info(f"Final Qty value: {qty_value:,.2f}")
+                return qty_value
+
+            except StaleElementReferenceException as e:
+                if attempt < max_retries - 1:
+                    self.logger.warning(f"Stale element error in footer extraction, retrying...")
+                    time.sleep(2)
+                    continue
+                else:
+                    self.logger.error(f"Stale element error after {max_retries} attempts: {e}")
+                    self._save_debug_screenshot("footer_extraction_stale_error")
+                    raise
+
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    self.logger.warning(f"Error extracting footer (attempt {attempt+1}): {e}")
+                    time.sleep(2)
+                    continue
+                else:
+                    self.logger.error(f"Error extracting footer Qty after {max_retries} attempts: {e}")
+                    self._save_debug_screenshot("footer_extraction_error")
+                    raise
+
+        return 0.0
 
     def _is_qty_value(self, text):
         """

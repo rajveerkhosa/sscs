@@ -34,11 +34,24 @@ excel:
         regular_gal: "E"
         def_gal:     "H"
         total_gal:   "K"
+      lastyear_columns:
+        diesel_gal:  "C"
+        regular_gal: "F"
+        def_gal:     "I"
+        total_gal:   "L"
 
     - name: "C Store Sales 25"
-      enabled: false            # set true if/when Store Stats is wired
+      enabled: true
       week_col: "A"
       total_row_label: "Total"
       rolling_window: true
       thisweek_columns:
-        cstore_sales: "B"
+        total_cstore_sales: "B"
+        lottery_sales: "E"
+        scale_sales: "H"
+        other_sales: "K"
+      lastyear_columns:
+        total_cstore_sales: "C"
+        lottery_sales: "F"
+        scale_sales: "I"
+        other_sales: "L"
